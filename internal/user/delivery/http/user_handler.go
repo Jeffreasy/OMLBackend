@@ -23,7 +23,13 @@ func (h *UserHandler) GetAll(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, users)
+
+	// Convert to response objects
+	var responses []model.UserResponse
+	for _, user := range users {
+		responses = append(responses, user.ToResponse())
+	}
+	c.JSON(http.StatusOK, responses)
 }
 
 // GetByID haalt een specifieke gebruiker op
@@ -34,7 +40,7 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, user.ToResponse())
 }
 
 // Create maakt een nieuwe gebruiker aan
@@ -50,7 +56,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, created)
+	c.JSON(http.StatusCreated, created.ToResponse())
 }
 
 // Update werkt een bestaande gebruiker bij
@@ -67,16 +73,19 @@ func (h *UserHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, updated)
+	c.JSON(http.StatusOK, updated.ToResponse())
 }
 
 // Delete verwijdert een gebruiker
 func (h *UserHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	err := h.service.DeleteUser(id)
+
+	userData, err := h.service.DeleteUser(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "gebruiker niet gevonden"})
 		return
 	}
+
+	c.Set("userData", userData)
 	c.JSON(http.StatusOK, gin.H{"message": "Gebruiker succesvol verwijderd"})
 }

@@ -66,8 +66,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	// Create new token with existing claims
-	token, err := h.service.Login(userClaims.Email, "") // Special case for refresh
+	// Use the new RefreshToken method
+	token, err := h.service.RefreshToken(userClaims)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

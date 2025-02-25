@@ -72,6 +72,41 @@ func NewAuditMiddleware(config AuditMiddlewareConfig) gin.HandlerFunc {
 			return
 		}
 
+		// Speciale behandeling voor token refresh
+		if c.Request.URL.Path == "/api/auth/refresh" && c.Request.Method == "POST" {
+			// Haal user info uit de context
+			userID, exists := c.Get("userID")
+			if !exists {
+				c.Next()
+				return
+			}
+
+			username, exists := c.Get("username")
+			if !exists {
+				username = "unknown"
+			}
+
+			email, exists := c.Get("email")
+			if !exists {
+				email = "unknown"
+			}
+
+			description := fmt.Sprintf("Token vernieuwd voor gebruiker %s (%s)", username.(string), email.(string))
+
+			// Log de refresh actie
+			_ = config.AuditService.LogAction(
+				userID.(uint),
+				username.(string),
+				model.ActionCreate,
+				model.EntityAuth,
+				fmt.Sprintf("USER_%d", userID.(uint)),
+				description,
+			)
+
+			c.Next()
+			return
+		}
+
 		// Lees en bewaar het originele request body voor updates
 		var requestBody []byte
 		if c.Request.Body != nil {
@@ -179,7 +214,20 @@ func NewAuditMiddleware(config AuditMiddlewareConfig) gin.HandlerFunc {
 				if name, ok := oldData["name"].(string); ok {
 					description += fmt.Sprintf(" - %s", name)
 				} else if username, ok := oldData["username"].(string); ok {
-					description += fmt.Sprintf(" - %s", username)
+					description += fmt.Sprintf(" - gebruiker: %s (%s)", username, oldData["email"].(string))
+				}
+			}
+		}
+
+		// Get the response body
+		if strings.Contains(c.Request.URL.Path, "/api/users/") && c.Request.Method == "DELETE" {
+			userData, exists := c.Get("userData")
+			if exists {
+				userDataMap, ok := userData.(map[string]interface{})
+				if ok {
+					username := userDataMap["username"].(string)
+					email := userDataMap["email"].(string)
+					description = fmt.Sprintf("Gebruiker verwijderd (ID: %s) - gebruiker: %s (%s)", entityID, username, email)
 				}
 			}
 		}

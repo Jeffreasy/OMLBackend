@@ -16,6 +16,7 @@ type EntityType string
 const (
 	EntityCustomer EntityType = "CUSTOMER"
 	EntityUser     EntityType = "USER"
+	EntityAuth     EntityType = "AUTH"
 )
 
 type AuditLog struct {

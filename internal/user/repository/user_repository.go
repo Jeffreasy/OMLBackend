@@ -15,6 +15,7 @@ type UserRepository interface {
 	Update(user *model.User) error
 	Delete(id string) error
 	GetUserForAudit(id string) (map[string]interface{}, error)
+	DeleteUser(id string) (map[string]interface{}, error)
 }
 
 type userRepository struct {
@@ -83,4 +84,26 @@ func (r *userRepository) GetUserForAudit(id string) (map[string]interface{}, err
 		"role":     user.Role,
 		"active":   user.Active,
 	}, nil
+}
+
+func (r *userRepository) DeleteUser(id string) (map[string]interface{}, error) {
+	// Eerst de gebruiker ophalen voor audit logging
+	var user model.User
+	if err := r.db.Where("id = ?", id).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Gebruikersgegevens opslaan voor audit
+	userData := map[string]interface{}{
+		"username": user.Username,
+		"email":    user.Email,
+		"role":     user.Role,
+	}
+
+	// Dan de gebruiker verwijderen
+	if err := r.db.Delete(&model.User{}, id).Error; err != nil {
+		return nil, err
+	}
+
+	return userData, nil
 }

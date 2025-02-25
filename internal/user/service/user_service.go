@@ -7,11 +7,11 @@ import (
 )
 
 type UserService interface {
-	GetAllUsers() ([]model.UserResponse, error)
-	GetUserByID(id string) (*model.UserResponse, error)
-	CreateUser(user model.User) (*model.UserResponse, error)
-	UpdateUser(id string, user model.User) (*model.UserResponse, error)
-	DeleteUser(id string) error
+	GetAllUsers() ([]model.User, error)
+	GetUserByID(id string) (*model.User, error)
+	CreateUser(user model.User) (*model.User, error)
+	UpdateUser(id string, user model.User) (*model.User, error)
+	DeleteUser(id string) (map[string]interface{}, error)
 }
 
 type userService struct {
@@ -22,70 +22,50 @@ func NewUserService(repo repository.UserRepository) UserService {
 	return &userService{repo: repo}
 }
 
-func (s *userService) GetAllUsers() ([]model.UserResponse, error) {
-	users, err := s.repo.FindAll()
-	if err != nil {
-		return nil, err
-	}
-
-	userResponses := make([]model.UserResponse, len(users))
-	for i, user := range users {
-		userResponses[i] = user.ToResponse()
-	}
-	return userResponses, nil
+func (s *userService) GetAllUsers() ([]model.User, error) {
+	return s.repo.FindAll()
 }
 
-func (s *userService) GetUserByID(id string) (*model.UserResponse, error) {
-	user, err := s.repo.FindByID(id)
-	if err != nil {
-		return nil, err
-	}
-	response := user.ToResponse()
-	return &response, nil
+func (s *userService) GetUserByID(id string) (*model.User, error) {
+	return s.repo.FindByID(id)
 }
 
-func (s *userService) CreateUser(user model.User) (*model.UserResponse, error) {
+func (s *userService) CreateUser(user model.User) (*model.User, error) {
 	// Check if email already exists
 	existing, _ := s.repo.FindByEmail(user.Email)
 	if existing != nil {
 		return nil, errors.New("email is al in gebruik")
 	}
 
-	err := s.repo.Create(&user)
-	if err != nil {
+	if err := s.repo.Create(&user); err != nil {
 		return nil, err
 	}
-
-	response := user.ToResponse()
-	return &response, nil
+	return &user, nil
 }
 
-func (s *userService) UpdateUser(id string, user model.User) (*model.UserResponse, error) {
-	existing, err := s.repo.FindByID(id)
+func (s *userService) UpdateUser(id string, user model.User) (*model.User, error) {
+	existingUser, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, err
 	}
 
 	// Update fields
-	existing.Username = user.Username
-	existing.Email = user.Email
-	existing.Role = user.Role
-	existing.Active = user.Active
+	existingUser.Username = user.Username
+	existingUser.Email = user.Email
+	existingUser.Role = user.Role
+	existingUser.Active = user.Active
 
-	// Only update password if provided
+	// Update password only if provided
 	if user.Password != "" {
-		existing.Password = user.Password
+		existingUser.Password = user.Password
 	}
 
-	err = s.repo.Update(existing)
-	if err != nil {
+	if err := s.repo.Update(existingUser); err != nil {
 		return nil, err
 	}
-
-	response := existing.ToResponse()
-	return &response, nil
+	return existingUser, nil
 }
 
-func (s *userService) DeleteUser(id string) error {
-	return s.repo.Delete(id)
+func (s *userService) DeleteUser(id string) (map[string]interface{}, error) {
+	return s.repo.DeleteUser(id)
 }

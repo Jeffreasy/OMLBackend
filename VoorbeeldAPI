@@ -1,0 +1,89 @@
+Overzicht van benodigde API's
+Klanten API's (CRUD)
+
+GET /api/klanten
+Ophalen van een lijst met alle klanten, met ondersteuning voor filteren, sorteren en pagineren.
+GET /api/klanten/{id}
+Ophalen van de details van een specifieke klant.
+POST /api/klanten
+Aanmaken van een nieuwe klant. Het request body bevat de klantgegevens (zoals naam, e-mail, adres, enzovoort).
+PUT /api/klanten/{id}
+Volledige update van de gegevens van een bestaande klant.
+PATCH /api/klanten/{id}
+Gedeeltelijke update (bijvoorbeeld enkel het telefoonnummer of adres wijzigen).
+DELETE /api/klanten/{id}
+Verwijderen van een klant uit het systeem.
+Zoek- en Filter API
+
+GET /api/klanten?zoekterm=…
+Met queryparameters kun je klanten zoeken op naam, e-mail of andere attributen. Vaak combineer je dit met de lijst-API.
+Authenticatie en Autorisatie API's
+Als je het systeem wilt beveiligen en alleen geautoriseerde gebruikers toegang wilt geven:
+
+POST /api/auth/login
+Inloggen van gebruikers.
+POST /api/auth/logout
+Uitloggen van gebruikers.
+(Optioneel) POST /api/auth/register
+Registreren van nieuwe beheerders of gebruikers.
+Gebruikersbeheer API (optioneel)
+Als er meerdere beheerders of gebruikers zijn die met het systeem werken:
+
+GET /api/users
+Lijst van gebruikers van het systeem.
+GET /api/users/{id}
+Details van een specifieke gebruiker.
+POST /api/users
+Aanmaken van een nieuwe gebruiker.
+PUT/PATCH /api/users/{id}
+Updaten van gebruikersgegevens.
+DELETE /api/users/{id}
+Verwijderen van een gebruiker.
+Audit / Logging API (optioneel)
+Voor het bijhouden van wijzigingen of activiteiten:
+
+GET /api/logs
+Overzicht van acties binnen het systeem.
+
+OdomosMintLogic/
+├── cmd/
+│   └── omlbackend/
+│       └── main.go
+├── config/
+│   └── config.go
+├── internal/
+│   ├── auth/
+│   │   ├── delivery/
+│   │   │   └── http/
+│   │   │       └── auth_handler.go
+│   │   ├── model/
+│   │   │   └── user.go
+│   │   └── service/
+│   │       └── auth_service.go
+│   └── customer/
+│       ├── delivery/
+│       │   └── http/
+│       │       └── customer_handler.go
+│       ├── model/
+│       │   └── customer.go
+│       ├── repository/
+│       │   └── customer_repository.go
+│       └── service/
+│           └── customer_service.go
+├── pkg/
+│   └── logger/
+│       └── logger.go
+├── go.mod
+├── go.sum
+└── README.md
+
+
+
+De volgende stappen die we kunnen nemen zijn:
+Database integratie implementeren (PostgreSQL met GORM)
+Service layer toevoegen voor business logic
+Repository layer toevoegen voor database operaties
+JWT authenticatie implementeren
+Middleware toevoegen voor auth checks
+Logging implementeren
+Error handling verbeteren

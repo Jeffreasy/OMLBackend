@@ -29,7 +29,7 @@ Dit project is bedoeld als voorbeeld van een schaalbare en onderhoudbare Go-appl
 - PostgreSQL: relationele database
 - JWT: voor login en session management
 
-We hanteren een “clean architecture”-achtige indeling, met mappen voor delivery (handlers), service, repository en model (data-objecten en logica).
+We hanteren een "clean architecture"-achtige indeling, met mappen voor delivery (handlers), service, repository en model (data-objecten en logica).
 
 Belangrijkste Features
 
@@ -236,7 +236,7 @@ Audit Logging
 AuditMiddleware verwerkt elke POST, PUT, PATCH en DELETE request.  
 De gewijzigde/nieuwe data wordt met de oude data vergeleken, en het verschil wordt opgeslagen in de **audit_logs**-tabel.  
 Via **GET /api/logs** (alleen voor admins) kun je de audit logs inzien.  
-**LET OP:** GET-requests worden momenteel niet gelogd. Als je “read”-acties ook wilt tracken, kun je dat aanpassen in de middleware door ActionRead te activeren.
+**LET OP:** GET-requests worden momenteel niet gelogd. Als je "read" acties ook wilt tracken, kun je dat aanpassen in de middleware door ActionRead te activeren.
 
 Productie Overwegingen
 
@@ -281,3 +281,37 @@ Volg hiervoor de standaard GitHub flow:
 Licentie
 
 Dit project is beschikbaar onder de MIT-licentie. Je mag de code vrij gebruiken, aanpassen en distribueren zolang je de licentie respecteert.
+
+## Code Review Opmerkingen en TODO's
+
+### Algemene verbeterpunten
+- Consolideer configuratie: Vermijd duplicatie tussen `config.Config` en `database.Config`
+- Gebruik één centraal `LoadConfig()`-mechanisme
+- Voeg betere validatie toe aan service-laag (bijv. voor gebruikersinvoer)
+- Overweeg gestructureerde logging (logrus of zap) voor consistentie
+
+### Beveiliging
+- Zorg dat JWT_SECRET in productie altijd wordt overschreven (niet de default gebruiken)
+- Overweeg een "mislukte inlogpogingen" teller of rate-limiter tegen brute-force
+- Controleer dat gevoelige data (wachtwoorden) nooit in logs terechtkomen
+- Zorg dat in productie DB_DROP_TABLES altijd false is
+
+### Database
+- Voeg indexen toe voor veelgebruikte query-velden (user_id, action_type, etc.)
+- Overweeg trigram-indexen voor ILIKE zoekopdrachten in PostgreSQL
+- Consolideer Delete-methodes in repositories (Delete vs DeleteUser)
+
+### API Design
+- Overweeg consistente response-structuur met "success" veld
+- Beperk pageSize om database-overbelasting te voorkomen
+- Documenteer context-gebruik (bijv. userData in context voor auditing)
+
+### Middleware
+- Consolideer JWT-validatie middleware (AuthMiddleware vs NewJWTAuthMiddleware)
+- Overweeg onderscheid tussen 401/403 responses (ontbrekende vs ongeldige claims)
+
+### Admin-gebruiker
+- Verplaats admin-gebruiker creatie naar een specifieke seed-functie of migratie
+- Documenteer default credentials duidelijk voor ontwikkelaars
+
+Deze punten zullen in toekomstige updates worden aangepakt om de codebase te verbeteren.

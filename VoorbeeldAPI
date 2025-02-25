@@ -1,58 +1,25 @@
-Overzicht van benodigde API's
-Klanten API's (CRUD)
+echo "# OdomosMintLogic Backend
 
-GET /api/klanten
-Ophalen van een lijst met alle klanten, met ondersteuning voor filteren, sorteren en pagineren.
-GET /api/klanten/{id}
-Ophalen van de details van een specifieke klant.
-POST /api/klanten
-Aanmaken van een nieuwe klant. Het request body bevat de klantgegevens (zoals naam, e-mail, adres, enzovoort).
-PUT /api/klanten/{id}
-Volledige update van de gegevens van een bestaande klant.
-PATCH /api/klanten/{id}
-Gedeeltelijke update (bijvoorbeeld enkel het telefoonnummer of adres wijzigen).
-DELETE /api/klanten/{id}
-Verwijderen van een klant uit het systeem.
-Zoek- en Filter API
-
-GET /api/klanten?zoekterm=…
-Met queryparameters kun je klanten zoeken op naam, e-mail of andere attributen. Vaak combineer je dit met de lijst-API.
-Authenticatie en Autorisatie API's
-Als je het systeem wilt beveiligen en alleen geautoriseerde gebruikers toegang wilt geven:
-
-POST /api/auth/login
-Inloggen van gebruikers.
-POST /api/auth/logout
-Uitloggen van gebruikers.
-(Optioneel) POST /api/auth/register
-Registreren van nieuwe beheerders of gebruikers.
-Gebruikersbeheer API (optioneel)
-Als er meerdere beheerders of gebruikers zijn die met het systeem werken:
-
-GET /api/users
-Lijst van gebruikers van het systeem.
-GET /api/users/{id}
-Details van een specifieke gebruiker.
-POST /api/users
-Aanmaken van een nieuwe gebruiker.
-PUT/PATCH /api/users/{id}
-Updaten van gebruikersgegevens.
-DELETE /api/users/{id}
-Verwijderen van een gebruiker.
-Audit / Logging API (optioneel)
-Voor het bijhouden van wijzigingen of activiteiten:
-
-GET /api/logs
-Overzicht van acties binnen het systeem.
-
-OdomosMintLogic/
+## Project Structuur
+\`\`\`
+OMLBackend/
 ├── cmd/
 │   └── omlbackend/
-│       └── main.go
+│       └── main.go                 # Applicatie entry point
 ├── config/
-│   └── config.go
+│   └── config.go                   # Configuratie management
 ├── internal/
-│   ├── auth/
+│   ├── audit/                      # Audit logging module
+│   │   ├── delivery/
+│   │   │   └── http/
+│   │   │       └── audit_handler.go
+│   │   ├── model/
+│   │   │   └── audit_log.go
+│   │   ├── repository/
+│   │   │   └── audit_repository.go
+│   │   └── service/
+│   │       └── audit_service.go
+│   ├── auth/                       # Authenticatie module
 │   │   ├── delivery/
 │   │   │   └── http/
 │   │   │       └── auth_handler.go
@@ -60,30 +27,131 @@ OdomosMintLogic/
 │   │   │   └── user.go
 │   │   └── service/
 │   │       └── auth_service.go
-│   └── customer/
+│   ├── customer/                   # Klantenbeheer module
+│   │   ├── delivery/
+│   │   │   └── http/
+│   │   │       └── customer_handler.go
+│   │   ├── model/
+│   │   │   └── customer.go
+│   │   ├── repository/
+│   │   │   └── customer_repository.go
+│   │   └── service/
+│   │       └── customer_service.go
+│   ├── middleware/                 # Middleware componenten
+│   │   ├── audit_middleware.go
+│   │   └── auth_middleware.go
+│   └── user/                       # Gebruikersbeheer module
 │       ├── delivery/
 │       │   └── http/
-│       │       └── customer_handler.go
+│       │       └── user_handler.go
 │       ├── model/
-│       │   └── customer.go
+│       │   └── user.go
 │       ├── repository/
-│       │   └── customer_repository.go
+│       │   └── user_repository.go
 │       └── service/
-│           └── customer_service.go
+│           └── user_service.go
 ├── pkg/
-│   └── logger/
-│       └── logger.go
-├── go.mod
-├── go.sum
-└── README.md
+│   └── database/                   # Gedeelde database functionaliteit
+│       └── postgres.go
+├── .gitignore                      # Git ignore configuratie
+├── go.mod                          # Go modules definitie
+├── go.sum                          # Go modules checksums
+└── README.md                       # Project documentatie
 
+## API Endpoints
 
+### Authenticatie Endpoints
 
-De volgende stappen die we kunnen nemen zijn:
-Database integratie implementeren (PostgreSQL met GORM)
-Service layer toevoegen voor business logic
-Repository layer toevoegen voor database operaties
-JWT authenticatie implementeren
-Middleware toevoegen voor auth checks
-Logging implementeren
-Error handling verbeteren
+POST /api/auth/login
+- Body: { \"email\": \"string\", \"password\": \"string\" }
+- Response: { \"access_token\": \"string\", \"token_type\": \"Bearer\", \"expires_in\": number, \"username\": \"string\", \"email\": \"string\", \"role\": \"string\" }
+
+POST /api/auth/register
+- Body: { \"username\": \"string\", \"email\": \"string\", \"password\": \"string\" }
+- Response: Zelfde als login
+
+POST /api/auth/refresh
+- Header: Authorization: Bearer <token>
+- Response: Nieuwe token response
+
+### Klanten Endpoints (Vereist AUTH)
+
+GET /api/klanten
+- Header: Authorization: Bearer <token>
+- Query Parameters:
+  - zoekterm: Zoeken op naam/email
+  - page: Paginanummer (default: 1)
+  - pageSize: Aantal items per pagina (default: 10)
+  - sortBy: Sorteerveld
+  - sortOrder: asc/desc
+
+GET /api/klanten/{id}
+POST /api/klanten
+PUT /api/klanten/{id}
+PATCH /api/klanten/{id}
+DELETE /api/klanten/{id}
+
+### Gebruikersbeheer Endpoints (Vereist ADMIN)
+
+GET /api/users
+GET /api/users/{id}
+POST /api/users
+PUT /api/users/{id}
+DELETE /api/users/{id}
+
+### Audit Logging Endpoints (Vereist ADMIN)
+
+GET /api/logs
+- Query Parameters:
+  - page: Paginanummer (default: 1)
+  - pageSize: Aantal items per pagina (default: 10)
+  - entityType: Filter op type (klanten/users)
+  - actionType: Filter op actie (create/update/delete)
+  - startDate: Start datum (ISO 8601)
+  - endDate: Eind datum (ISO 8601)
+
+## Autorisatie Niveaus
+
+- PUBLIC: Geen token nodig
+- USER: Token met USER of ADMIN rol
+- ADMIN: Token met ADMIN rol
+
+## Headers
+
+Alle beveiligde endpoints vereisen:
+\`\`\`
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+\`\`\`
+
+## Database Schema
+
+### Users
+- id (uint, primary key)
+- username (string, unique)
+- email (string, unique)
+- password (string, hashed)
+- role (string: ADMIN|USER)
+- active (boolean)
+- created_at (timestamp)
+- updated_at (timestamp)
+
+### Customers
+- id (uint, primary key)
+- name (string)
+- email (string)
+- phone (string)
+- address (string)
+- created_at (timestamp)
+- updated_at (timestamp)
+
+### AuditLogs
+- id (uint, primary key)
+- user_id (uint, foreign key)
+- username (string)
+- action_type (string: CREATE|UPDATE|DELETE)
+- entity_type (string: USER|CUSTOMER)
+- entity_id (string)
+- description (string)
+- created_at (timestamp)
+" > OMLBackend/VoorbeeldAPI

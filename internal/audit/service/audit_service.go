@@ -5,35 +5,44 @@ import (
 	"odomosml/internal/audit/repository"
 )
 
+// AuditService interface definieert de methodes voor audit logging
 type AuditService interface {
-	LogAction(userID uint, username string, actionType model.ActionType, entityType model.EntityType, entityID string, description string) error
 	GetAuditLogs(filter model.AuditLogFilter) ([]model.AuditLog, int64, error)
+	Create(log *model.AuditLog) error
 }
 
+// auditService implementeert de AuditService interface
 type auditService struct {
 	repo repository.AuditRepository
 }
 
+// NewAuditService maakt een nieuwe AuditService instantie
 func NewAuditService(repo repository.AuditRepository) AuditService {
-	return &auditService{repo: repo}
-}
-
-func (s *auditService) LogAction(userID uint, username string, actionType model.ActionType, entityType model.EntityType, entityID string, description string) error {
-	log := &model.AuditLog{
-		UserID:      userID,
-		Username:    username,
-		ActionType:  actionType,
-		EntityType:  entityType,
-		EntityID:    entityID,
-		Description: description,
+	return &auditService{
+		repo: repo,
 	}
-	return s.repo.Create(log)
 }
 
+// GetAuditLogs haalt audit logs op met filters
 func (s *auditService) GetAuditLogs(filter model.AuditLogFilter) ([]model.AuditLog, int64, error) {
-	logs, total, err := s.repo.FindAll(filter)
-	if err != nil {
-		return nil, 0, err
+	// Valideer paginering
+	if filter.Page < 1 {
+		filter.Page = 1
 	}
-	return logs, total, nil
+
+	if filter.PageSize < 1 || filter.PageSize > 100 {
+		filter.PageSize = 10 // Default page size
+	}
+
+	return s.repo.FindAll(filter)
+}
+
+// Create maakt een nieuwe audit log entry aan
+func (s *auditService) Create(log *model.AuditLog) error {
+	// Validatie
+	if log.UserID == 0 {
+		log.UserID = 1 // Default naar system user als geen gebruiker is opgegeven
+	}
+
+	return s.repo.Create(log)
 }

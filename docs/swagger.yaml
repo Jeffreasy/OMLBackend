@@ -1,0 +1,731 @@
+basePath: /api/v1
+definitions:
+  internal_auth_delivery_http.LoginRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: password123
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  odomosml_internal_customer_model.Customer:
+    properties:
+      address:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      phone:
+        type: string
+      updated_at:
+        type: string
+    required:
+    - email
+    - name
+    type: object
+  odomosml_internal_user_model.User:
+    description: Een gebruiker in het systeem
+    properties:
+      active:
+        example: true
+        type: boolean
+      created_at:
+        example: "2024-02-25T20:30:00Z"
+        format: date-time
+        type: string
+      email:
+        example: john@example.com
+        type: string
+      id:
+        example: 1
+        type: integer
+      password:
+        example: password123
+        type: string
+      role:
+        example: USER
+        type: string
+      updated_at:
+        example: "2024-02-25T20:30:00Z"
+        format: date-time
+        type: string
+      username:
+        example: johndoe
+        type: string
+    type: object
+  odomosml_internal_user_model.UserResponse:
+    description: Response object voor gebruikersgegevens
+    properties:
+      active:
+        example: true
+        type: boolean
+      created_at:
+        example: "2024-02-25T20:30:00Z"
+        format: date-time
+        type: string
+      email:
+        example: john@example.com
+        type: string
+      id:
+        example: 1
+        type: integer
+      role:
+        example: USER
+        type: string
+      updated_at:
+        example: "2024-02-25T20:30:00Z"
+        format: date-time
+        type: string
+      username:
+        example: johndoe
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@odomosml.com
+    name: API Support
+    url: http://www.odomosml.com/support
+  description: API voor het OdomosMintLogic systeem
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: OdomosMintLogic API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticeer een gebruiker en krijg een JWT token
+      parameters:
+      - description: Login gegevens
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth_delivery_http.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: JWT token
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Ongeldige invoer
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Ongeldige inloggegevens
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Inloggen
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Vernieuw een JWT token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Nieuw JWT token
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Ongeldige of verlopen token
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Token vernieuwen
+      tags:
+      - auth
+  /klanten:
+    get:
+      consumes:
+      - application/json
+      description: Haalt een lijst van alle klanten op met optionele filters
+      parameters:
+      - description: 'Paginanummer (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Aantal items per pagina (default: 10, max: 100)'
+        in: query
+        name: pageSize
+        type: integer
+      - description: Zoekterm voor naam of email
+        in: query
+        name: searchTerm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Succesvol opgehaald
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Ongeldige parameters
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Niet geautoriseerd
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Lijst van klanten ophalen
+      tags:
+      - customers
+    post:
+      consumes:
+      - application/json
+      description: Maakt een nieuwe klant aan
+      parameters:
+      - description: Klant gegevens
+        in: body
+        name: customer
+        required: true
+        schema:
+          $ref: '#/definitions/odomosml_internal_customer_model.Customer'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Succesvol aangemaakt
+          schema:
+            $ref: '#/definitions/odomosml_internal_customer_model.Customer'
+        "400":
+          description: Ongeldige invoer
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Niet geautoriseerd
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Email bestaat al
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Nieuwe klant aanmaken
+      tags:
+      - customers
+  /klanten/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Verwijdert een klant
+      parameters:
+      - description: Klant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Succesvol verwijderd
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Ongeldig ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Niet geautoriseerd
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Klant niet gevonden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Klant verwijderen
+      tags:
+      - customers
+    get:
+      consumes:
+      - application/json
+      description: Haalt een specifieke klant op basis van ID
+      parameters:
+      - description: Klant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Succesvol opgehaald
+          schema:
+            $ref: '#/definitions/odomosml_internal_customer_model.Customer'
+        "400":
+          description: Ongeldig ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Niet geautoriseerd
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Klant niet gevonden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Klant ophalen op ID
+      tags:
+      - customers
+    patch:
+      consumes:
+      - application/json
+      description: Werkt specifieke velden van een klant bij
+      parameters:
+      - description: Klant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Klant velden om bij te werken
+        in: body
+        name: customer
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Succesvol bijgewerkt
+          schema:
+            $ref: '#/definitions/odomosml_internal_customer_model.Customer'
+        "400":
+          description: Ongeldige invoer
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Niet geautoriseerd
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Klant niet gevonden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Klant gedeeltelijk bijwerken
+      tags:
+      - customers
+    put:
+      consumes:
+      - application/json
+      description: Werkt een bestaande klant bij
+      parameters:
+      - description: Klant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Klant gegevens
+        in: body
+        name: customer
+        required: true
+        schema:
+          $ref: '#/definitions/odomosml_internal_customer_model.Customer'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Succesvol bijgewerkt
+          schema:
+            $ref: '#/definitions/odomosml_internal_customer_model.Customer'
+        "400":
+          description: Ongeldige invoer
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Niet geautoriseerd
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Klant niet gevonden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Email bestaat al
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Klant bijwerken
+      tags:
+      - customers
+  /users:
+    get:
+      consumes:
+      - application/json
+      description: Haalt een lijst van alle gebruikers op met optionele filters
+      parameters:
+      - description: 'Paginanummer (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Aantal items per pagina (default: 10, max: 100)'
+        in: query
+        name: pageSize
+        type: integer
+      - description: Zoekterm voor gebruikersnaam of email
+        in: query
+        name: searchTerm
+        type: string
+      - description: Filter op rol (ADMIN/USER)
+        in: query
+        name: role
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{ data: []model.UserResponse, pagination: object }'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Lijst van gebruikers ophalen
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Maakt een nieuwe gebruiker aan
+      parameters:
+      - description: Gebruiker gegevens
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/odomosml_internal_user_model.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/odomosml_internal_user_model.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Nieuwe gebruiker aanmaken
+      tags:
+      - users
+  /users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Verwijdert een gebruiker
+      parameters:
+      - description: Gebruiker ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Gebruiker verwijderen
+      tags:
+      - users
+    get:
+      consumes:
+      - application/json
+      description: Haalt een specifieke gebruiker op basis van ID
+      parameters:
+      - description: Gebruiker ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/odomosml_internal_user_model.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Gebruiker ophalen op ID
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Werkt een bestaande gebruiker bij
+      parameters:
+      - description: Gebruiker ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Gebruiker gegevens
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/odomosml_internal_user_model.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/odomosml_internal_user_model.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Gebruiker bijwerken
+      tags:
+      - users
+securityDefinitions:
+  Bearer:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

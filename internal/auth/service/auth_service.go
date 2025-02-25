@@ -2,8 +2,8 @@ package service
 
 import (
 	"errors"
+	"odomosml/config"
 	"odomosml/internal/auth/model"
-	"odomosml/internal/config"
 	userModel "odomosml/internal/user/model"
 	"odomosml/internal/user/repository"
 	"time"

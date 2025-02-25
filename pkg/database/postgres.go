@@ -3,147 +3,179 @@ package database
 import (
 	"fmt"
 	"log"
-	"odomosml/internal/user/model"
-	"os"
+	"odomosml/config"
+	auditModel "odomosml/internal/audit/model"
+	customerModel "odomosml/internal/customer/model"
+	userModel "odomosml/internal/user/model"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-// Config bevat de database configuratie
-type Config struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
-}
-
 // NewPostgresDB initialiseert een nieuwe PostgreSQL database connectie
-func NewPostgresDB(config Config) (*gorm.DB, error) {
-	// Check of tabellen moeten worden gedropped
-	shouldDropTables := getEnvOrDefault("DB_DROP_TABLES", "false") == "true"
-
-	// Gebruik config of fallback naar environment variables
-	dbHost := getConfigOrEnv(config.Host, "DB_HOST", "localhost")
-	dbPort := getConfigOrEnv(config.Port, "DB_PORT", "5432")
-	dbUser := getConfigOrEnv(config.User, "DB_USER", "postgres")
-	dbPass := getConfigOrEnv(config.Password, "DB_PASSWORD", "postgres")
-	dbName := getConfigOrEnv(config.DBName, "DB_NAME", "odomosml")
-	sslMode := getConfigOrEnv(config.SSLMode, "DB_SSL_MODE", "disable")
-
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		dbHost, dbPort, dbUser, dbPass, dbName, sslMode)
-
-	// Configureer GORM met debug logging
-	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+func NewPostgresDB(cfg *config.Config) (*gorm.DB, error) {
+	// Configureer GORM logger op basis van de applicatie log level
+	gormLogLevel := logger.Info
+	if cfg.IsProduction() {
+		gormLogLevel = logger.Error
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), gormConfig)
+	// Maak connectie met de database
+	db, err := gorm.Open(postgres.Open(cfg.GetDSN()), &gorm.Config{
+		Logger: logger.Default.LogMode(gormLogLevel),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to database: %v", err)
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	log.Println("Connected to database")
+	// Configureer connection pool
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database connection: %w", err)
+	}
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	// Drop tables alleen als DB_DROP_TABLES=true
-	if shouldDropTables {
+	// Drop tabellen indien nodig (alleen in development!)
+	if cfg.DropTables {
+		if cfg.IsProduction() {
+			log.Println("WAARSCHUWING: Tabellen droppen in productie is gevaarlijk!")
+		}
 		log.Println("Dropping existing tables...")
 		if err := dropTables(db); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to drop tables: %w", err)
 		}
 	}
 
-	log.Println("Creating or updating tables...")
-	if err := createTables(db); err != nil {
-		return nil, err
+	// Migreer database schema
+	if err := migrateSchema(db); err != nil {
+		return nil, fmt.Errorf("failed to migrate schema: %w", err)
 	}
 
-	// Maak admin gebruiker aan als deze nog niet bestaat
+	// Maak admin gebruiker aan indien nodig
 	if err := ensureAdminExists(db); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to ensure admin exists: %w", err)
 	}
 
+	log.Println("Database initialized successfully")
 	return db, nil
 }
 
-// getConfigOrEnv haalt een waarde op uit config, environment variable of default
-func getConfigOrEnv(configValue, envKey, defaultValue string) string {
-	if configValue != "" {
-		return configValue
-	}
-	return getEnvOrDefault(envKey, defaultValue)
-}
-
-// dropTables verwijdert bestaande tabellen
+// dropTables verwijdert alle tabellen uit de database
 func dropTables(db *gorm.DB) error {
-	if err := db.Exec("DROP TABLE IF EXISTS audit_logs CASCADE").Error; err != nil {
-		return err
-	}
-	if err := db.Exec("DROP TABLE IF EXISTS users CASCADE").Error; err != nil {
-		return err
-	}
-	if err := db.Exec("DROP TABLE IF EXISTS customers CASCADE").Error; err != nil {
-		return err
+	log.Println("Dropping tables: audit_logs, customers, users")
+	if err := db.Migrator().DropTable(&auditModel.AuditLog{}, "customers", &userModel.User{}); err != nil {
+		return fmt.Errorf("failed to drop tables: %w", err)
 	}
 	return nil
 }
 
-// createTables maakt de benodigde tabellen aan
-func createTables(db *gorm.DB) error {
-	// Auto-migrate zal tabellen aanmaken of updaten zonder data te verwijderen
-	if err := db.AutoMigrate(&model.User{}); err != nil {
-		return fmt.Errorf("error migrating users table: %v", err)
+// createIndexes maakt indexen aan voor betere performance
+func createIndexes(db *gorm.DB) error {
+	// Maak de pg_trgm extensie aan voor trigram indexen (voor ILIKE queries)
+	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm;").Error; err != nil {
+		log.Printf("Waarschuwing: Kon pg_trgm extensie niet aanmaken: %v", err)
+		// Ga door, dit is niet kritiek
 	}
 
-	// Voeg hier andere modellen toe voor auto-migrate
-	// if err := db.AutoMigrate(&model.Customer{}); err != nil {
-	//     return fmt.Errorf("error migrating customers table: %v", err)
-	// }
+	// Indexen voor User model
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);").Error; err != nil {
+		return err
+	}
+
+	// Trigram indexen voor User model (voor ILIKE zoekopdrachten)
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_email_trgm ON users USING gin (email gin_trgm_ops);").Error; err != nil {
+		log.Printf("Waarschuwing: Kon trigram index voor users.email niet aanmaken: %v", err)
+		// Ga door, dit is niet kritiek
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_users_username_trgm ON users USING gin (username gin_trgm_ops);").Error; err != nil {
+		log.Printf("Waarschuwing: Kon trigram index voor users.username niet aanmaken: %v", err)
+		// Ga door, dit is niet kritiek
+	}
+
+	// Indexen voor Customer model
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);").Error; err != nil {
+		return err
+	}
+
+	// Trigram indexen voor Customer model (voor ILIKE zoekopdrachten)
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_customers_email_trgm ON customers USING gin (email gin_trgm_ops);").Error; err != nil {
+		log.Printf("Waarschuwing: Kon trigram index voor customers.email niet aanmaken: %v", err)
+		// Ga door, dit is niet kritiek
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_customers_name_trgm ON customers USING gin (name gin_trgm_ops);").Error; err != nil {
+		log.Printf("Waarschuwing: Kon trigram index voor customers.name niet aanmaken: %v", err)
+		// Ga door, dit is niet kritiek
+	}
+
+	// Indexen voor AuditLog model
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON audit_logs(action_type);").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_type ON audit_logs(entity_type);").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);").Error; err != nil {
+		return err
+	}
 
 	return nil
 }
 
-// ensureAdminExists zorgt dat er een admin gebruiker bestaat
+// migrateSchema migreert het database schema
+func migrateSchema(db *gorm.DB) error {
+	log.Println("Migrating database schema...")
+
+	// Migreer modellen
+	if err := db.AutoMigrate(
+		&userModel.User{},
+		&customerModel.Customer{},
+		&auditModel.AuditLog{},
+	); err != nil {
+		return err
+	}
+
+	// Maak indexen aan
+	if err := createIndexes(db); err != nil {
+		log.Printf("Waarschuwing: Kon sommige indexen niet aanmaken: %v", err)
+		// Ga door, dit is niet kritiek
+	}
+
+	return nil
+}
+
+// ensureAdminExists zorgt ervoor dat er minstens één admin gebruiker bestaat
 func ensureAdminExists(db *gorm.DB) error {
 	var count int64
-	db.Model(&model.User{}).Where("role = ?", "ADMIN").Count(&count)
-
+	db.Model(&userModel.User{}).Where("role = ?", userModel.RoleAdmin).Count(&count)
 	if count == 0 {
 		log.Println("Creating admin user...")
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-		if err != nil {
-			return err
+		adminUser := &userModel.User{
+			Username: "admin",
+			Email:    "admin@example.com",
+			Password: "admin123", // Dit wordt automatisch gehasht door BeforeSave hook
+			Role:     userModel.RoleAdmin,
+			Active:   true,
 		}
-
-		adminUser := model.User{
-			Username:  "admin",
-			Email:     "admin@example.com",
-			Password:  string(hashedPassword),
-			Role:      "ADMIN",
-			Active:    true,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+		if err := db.Create(adminUser).Error; err != nil {
+			return fmt.Errorf("failed to create admin user: %v", err)
 		}
-
-		if err := db.Create(&adminUser).Error; err != nil {
-			return err
-		}
-		log.Printf("Admin user created successfully with ID: %d\n", adminUser.ID)
+		log.Println("Admin user created successfully")
 	}
-
 	return nil
-}
-
-// getEnvOrDefault haalt een environment variable op of geeft een default waarde terug
-func getEnvOrDefault(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
 }

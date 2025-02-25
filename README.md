@@ -1,317 +1,180 @@
-OdomosML
-OdomosML is een RESTful API geschreven in Go (Golang) met Gin als webframework. Het project demonstreert:
+# OdomosML Backend
 
-- Authenticatie en autorisatie via JWT-tokens (JSON Web Tokens)
-- Gebruikersbeheer (aanmaken, bewerken, verwijderen)
-- Klantenbeheer (CRUD-operaties)
-- Audit logging (registratie van acties, wijzigingen, en verwijderingen in de database)
+Backend API voor het OdomosML platform.
 
-Inhoudsopgave
-- Project Overzicht
-- Belangrijkste Features
-- Structuur en Mappen
-- Installatie & Setup
-- Environment Variables
-- Uitvoeren
-- API Endpoints
-- Authenticatie & Autorisatie
-- Audit Logging
-- Productie Overwegingen
-- TODO's / Verbeterpunten
-- Bijdragen
-- Licentie
+## Inhoudsopgave
 
-Project Overzicht
-Dit project is bedoeld als voorbeeld van een schaalbare en onderhoudbare Go-applicatie die gebruikmaakt van:
+- [Installatie](#installatie)
+- [Configuratie](#configuratie)
+- [Ontwikkeling](#ontwikkeling)
+- [API Endpoints](#api-endpoints)
+- [Best Practices](#best-practices)
+- [Code Review Opmerkingen](#code-review-opmerkingen)
 
-- Gin: lichtgewicht HTTP-server en router
-- GORM: ORM voor database-interacties
-- PostgreSQL: relationele database
-- JWT: voor login en session management
+## Installatie
 
-We hanteren een "clean architecture"-achtige indeling, met mappen voor delivery (handlers), service, repository en model (data-objecten en logica).
+### Vereisten
 
-Belangrijkste Features
+- Go 1.18 of hoger
+- PostgreSQL 13 of hoger
 
-Gebruikersbeheer:
-- Aanmaken en updaten van gebruikers (inclusief wachtwoord-hashing).
-- Autorisatie-rollen: admin, user, etc.
+### Stappen
 
-Klantenbeheer:
-- CRUD-operaties (Create, Read, Update, Delete).
-- Mogelijkheid tot gefilterde zoekopdrachten (paginering, zoekterm, sortering).
+1. Clone de repository:
+   ```bash
+   git clone https://github.com/yourusername/odomosml.git
+   cd odomosml
+   ```
 
-Authenticatie:
-- JWT-token genereren bij inloggen of registreren.
-- Token refresh endpoint.
+2. Installeer dependencies:
+   ```bash
+   go mod download
+   ```
 
-Auditing:
-- Alle mutaties (POST, PUT, PATCH, DELETE) worden vastgelegd in audit logs.
-- Mogelijkheid om audit logs gefilterd op te vragen (per entiteit, actie, datum, enz.).
+3. Maak een `.env` bestand aan (zie `.env.example` voor een voorbeeld):
+   ```bash
+   cp .env.example .env
+   ```
 
-Structuur en Mappen
+4. Start de applicatie:
+   ```bash
+   go run cmd/omlbackend/main.go
+   ```
 
-De code is georganiseerd in diverse mappen en bestanden:
+## Configuratie
 
-```bash
-.
+De applicatie gebruikt environment variabelen voor configuratie. Zie `.env.example` voor alle beschikbare opties.
+
+Belangrijke configuratie opties:
+
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: Database configuratie
+- `JWT_SECRET`: Secret key voor JWT tokens (verander dit in productie!)
+- `SERVER_ADDRESS`: Adres waarop de server draait (default: `:8080`)
+- `DB_DROP_TABLES`: Zet op `true` om tabellen te droppen bij startup (alleen voor development!)
+
+## Ontwikkeling
+
+### Project Structuur
+
+```
+OMLBackend/
+├── cmd/
+│   └── omlbackend/
+│       └── main.go           # Entry point
 ├── config/
-│   └── config.go            # Laden van omgevingsvariabelen (DB, server-poort, JWT-secret, etc.)
+│   └── config.go             # Configuratie
 ├── internal/
-│   ├── audit/
-│   │   ├── delivery/http/   # AuditHandler (Gin handlert)
-│   │   ├── model/           # AuditLog en gerelateerde structs
-│   │   ├── repository/      # AuditRepository (DB-operaties)
-│   │   └── service/         # AuditService (bedrijfslogica voor logging)
-│   ├── auth/
-│   │   ├── delivery/http/   # AuthHandler (login, register, refresh)
-│   │   ├── model/           # Auth gerelateerde models (TokenResponse, Claims, etc.)
-│   │   └── service/         # AuthService (JWT genereren/valideren, registratie)
-│   ├── customer/
-│   │   ├── delivery/http/   # CustomerHandler (klantenbeheer)
-│   │   ├── model/           # Customer data (name, email, etc.)
-│   │   ├── repository/      # CustomerRepository (DB-operaties)
-│   │   └── service/         # CustomerService (businesslogica)
-│   ├── user/
-│   │   ├── delivery/http/   # UserHandler (gebruikersbeheer)
-│   │   ├── model/           # User model + rollen
-│   │   ├── repository/      # UserRepository (DB-operaties)
-│   │   └── service/         # UserService (businesslogica)
-│   └── middleware/          # AuthMiddleware, RoleMiddleware, AuditMiddleware
+│   ├── app/
+│   │   └── app.go            # App setup
+│   ├── audit/                # Audit logging
+│   ├── auth/                 # Authenticatie
+│   ├── customer/             # Klantenbeheer
+│   ├── middleware/           # Middleware
+│   └── user/                 # Gebruikersbeheer
 ├── pkg/
-│   └── database/
-│       └── database.go      # Database connectie (PostgreSQL via GORM)
-├── go.mod                    # Go modules + dependencies
-├── go.sum                    # Dependency checksums
-└── main.go                   # Startpunt van de applicatie (laadt config, router, etc.)
+│   └── database/             # Database helpers
+├── .env.example              # Voorbeeld configuratie
+├── go.mod                    # Go modules
+└── README.md                 # Deze file
 ```
 
-Installatie & Setup
+### Architectuur
 
-Vereisten
-- Go >= 1.18
-- PostgreSQL (optioneel Docker als je snel een test-DB wilt draaien)
-- GIT voor het klonen van de repository
+De applicatie volgt een Clean Architecture patroon:
 
-Stappen
+- **Models**: Datastructuren en business regels
+- **Repositories**: Data access layer
+- **Services**: Business logic
+- **Handlers**: HTTP request handlers
 
-Repository klonen:
+## API Endpoints
 
-```bash
-git clone <URL-naar-jouw-repo> odomosml
-cd odomosml
-```
+### Authenticatie
 
-Go modules installeren:
+- `POST /api/auth/login`: Inloggen
+- `POST /api/auth/register`: Registreren
+- `POST /api/auth/refresh`: Token vernieuwen
 
-```bash
-go mod tidy
-```
-Dit haalt alle benodigde pakketten binnen.
+### Gebruikers
 
-Database configuratie:
+- `GET /api/users`: Alle gebruikers ophalen
+- `GET /api/users/:id`: Gebruiker ophalen
+- `POST /api/users`: Gebruiker aanmaken
+- `PUT /api/users/:id`: Gebruiker bijwerken
+- `DELETE /api/users/:id`: Gebruiker verwijderen
 
-- Creëer een PostgreSQL-database (bijv. odomosml).
-- Controleer de variabelen in Environment Variables of pas .env aan.
-- Eventueel .env-bestand maken:
-  - Als je met een .env-bestand werkt, maak deze in de root aan.
-  - Vul daar je DB-gegevens in, server-poort, etc.
+### Klanten
 
-Environment Variables
+- `GET /api/klanten`: Alle klanten ophalen
+- `GET /api/klanten/:id`: Klant ophalen
+- `POST /api/klanten`: Klant aanmaken
+- `PUT /api/klanten/:id`: Klant bijwerken
+- `PATCH /api/klanten/:id`: Klant gedeeltelijk bijwerken
+- `DELETE /api/klanten/:id`: Klant verwijderen
 
-Het project haalt diverse instellingen op uit omgevingsvariabelen. Dit gebeurt in **config/config.go**. De belangrijkste:
+### Audit Logs
 
-| Variabele       | Default         | Beschrijving                                              |
-|-----------------|-----------------|-----------------------------------------------------------|
-| SERVER_ADDRESS  | :8080           | Poort waarop de server luistert                           |
-| DB_HOST         | localhost       | Hostname van de DB                                        |
-| DB_PORT         | 5432            | Port van de DB                                            |
-| DB_USER         | postgres        | Database gebruikersnaam                                   |
-| DB_PASSWORD     | Bootje@12       | Database wachtwoord                                       |
-| DB_NAME         | odomosml        | Database naam                                             |
-| JWT_SECRET      | your-secret-key | Secret key voor JWT-signing. In productie: zet dit op iets sterks! |
+- `GET /api/logs`: Audit logs ophalen
 
-*Let op:* de standaard DBPassword in code is alleen voor test/demo. In productie gebruik je een sterke, geheime variabele.
-
-Uitvoeren
-
-Je kunt de applicatie starten met:
-
-```bash
-go run main.go
-```
-Bij het opstarten worden alle tabellen in je PostgreSQL-database gedropt en opnieuw aangemaakt. Er wordt een admin-gebruiker aangemaakt:
-
-- username: admin
-- email: admin@example.com
-- password: admin123
-
-Na succesvolle start luistert de applicatie op het adres dat staat in **SERVER_ADDRESS** (standaard :8080).
-
-Open een REST client (bijv. Postman of Insomnia) en maak requests naar http://localhost:8080/.
-
-API Endpoints
-
-Hier een overzicht van de belangrijkste routes. Prefix: **/api**.
-
-Auth
-Methode	Endpoint	        Beschrijving	                                  Bescherming
-POST	    /auth/login	    Inloggen met email + wachtwoord	              Publiek
-POST	    /auth/register	Nieuw account aanmaken	                      Publiek
-POST	    /auth/refresh	    Nieuw JWT token op basis van huidig token	      JWT vereist, alle rollen
-
-Voorbeeld (login):
-
-```json
-POST /api/auth/login
-{
-  "email": "admin@example.com",
-  "password": "admin123"
-}
-```
-
-Response (succes):
-
-```json
-{
-  "access_token": "<JWT-HIER>",
-  "token_type": "Bearer",
-  "expires_in": 86400,
-  "username": "admin",
-  "email": "admin@example.com",
-  "role": "ADMIN"
-}
-```
-
-Users
-Methode	Endpoint	        Beschrijving	                    Vereiste rol
-GET	    /users	        Haal alle gebruikers op	            ADMIN
-GET	    /users/:id	    Haal gebruiker op ID	            ADMIN
-POST	    /users	        Maak nieuwe gebruiker aan	        ADMIN
-PUT	    /users/:id	    Vervang bestaande gebruiker	    ADMIN
-DELETE	    /users/:id	    Verwijder bestaande gebruiker	    ADMIN
-
-Klanten
-Methode	Endpoint	        Beschrijving	                                      Vereiste rol
-GET	    /klanten	    Lijst van klanten (met zoek, paging, etc.)	      ADMIN of USER
-GET	    /klanten/:id	Specifieke klant op ID	                              ADMIN of USER
-POST	    /klanten	    Nieuwe klant aanmaken	                              ADMIN of USER
-PUT	    /klanten/:id	Bestaande klant volledig updaten	                  ADMIN of USER
-PATCH	    /klanten/:id	Bestaande klant gedeeltelijk updaten	              ADMIN of USER
-DELETE	    /klanten/:id	Klant verwijderen	                                  ADMIN of USER
-
-Voorbeeld (klant maken):
-
-```json
-POST /api/klanten
-{
-  "name": "Test Klant",
-  "email": "test@klant.nl",
-  "phone": "+31 6 12345678",
-  "address": "Straat 123, 5678AB Plaats"
-}
-```
-
-Audit Logs
-Methode	Endpoint	        Beschrijving	                                        Vereiste rol
-GET	    /logs	        Audit-logs ophalen (met diverse filters / paginatie)	    ADMIN
-
-Beschikbare query-params:
-page, pageSize, entityType=klanten|users, actionType=create|update|delete, startDate=<ISO8601>, endDate=<ISO8601>
-
-Authenticatie & Autorisatie
-
-Authenticatie vindt plaats via JWT-tokens. Je krijgt een token bij **POST /auth/login** of **POST /auth/register**.  
-Autorisatie wordt afgedwongen via de AuthMiddleware en de RoleMiddleware in Gin.  
-Om toegang te krijgen tot beschermde endpoints, stuur je in je header:
-
-```makefile
-Authorization: Bearer <JWT>
-```
-
-*Opgelet:* De standaard Refresh-functionaliteit maakt nog gebruik van een shortcut (Login(email, "")). Overweeg een aparte functie in de service voor echte tokenrefresh (zie TODO).
-
-Audit Logging
-
-AuditMiddleware verwerkt elke POST, PUT, PATCH en DELETE request.  
-De gewijzigde/nieuwe data wordt met de oude data vergeleken, en het verschil wordt opgeslagen in de **audit_logs**-tabel.  
-Via **GET /api/logs** (alleen voor admins) kun je de audit logs inzien.  
-**LET OP:** GET-requests worden momenteel niet gelogd. Als je "read" acties ook wilt tracken, kun je dat aanpassen in de middleware door ActionRead te activeren.
-
-Productie Overwegingen
-
-- Drop and Create Tables: Standaard worden bij elke start alle tabellen gedropt. Maak dit optioneel met een environment-variabele (zoals DB_DROP_TABLES) zodat in productie je data niet gewist wordt.
-- Wachtwoord-hashing bij updates: De code heeft een BeforeCreate-hook, maar nog niet BeforeUpdate. Implementeer BeforeSave om ook bij updates het wachtwoord automatisch te hashen.
-- JWT-secret: Gebruik een veilige, lang random secret in productie, nooit de default "your-secret-key".
-- SSLMode: In productie wil je PostgreSQL gewoonlijk met SSL aanroepen (sslmode=require of vergelijkbaar).
-- Logging: Overweeg structured logging (bijv. logrus of zap) voor meer controle en consistentie.
-
-TODO's / Verbeterpunten
-
-**Token Refresh Flow**
-- Momenteel wordt Login(userClaims.Email, "") aangeroepen. Splits dit uit in een RefreshToken() methode op de AuthService.
-
-**Wachtwoord-hashing bij Update**
-- Implementeer een BeforeSave-hook of BeforeUpdate-hook in het User model, zodat nieuwe wachtwoorden automatisch gehasht worden.
-
-**Optionele Table-Drop**
-- Maak het droppen van tabellen optioneel; in productie wil je data behouden.
-- Voeg bijvoorbeeld DB_DROP_TABLES=true toe als env en check deze in database.NewPostgresDB().
-
-**Expand Logging**
-- Voeg READ logging toe in AuditMiddleware als je ook GET-verzoeken wilt vastleggen.
-
-**Deployment Scripts / Docker**
-- Schrijf Dockerfiles of Kubernetes-manifests om het project in containers uit te rollen.
-- Optimaliseer build stages (multi-stage builds) voor productie.
-
-**Unit Tests / Integration Tests**
-- Voeg tests toe voor je handlers, services, en repos.
-- Maak gebruik van mocking of testcontainers (bijv. testcontainers-go).
-
-Bijdragen
-
-Bijdragen in de vorm van pull requests en feature requests zijn welkom!  
-Volg hiervoor de standaard GitHub flow:
-- Fork deze repository
-- Maak een featurebranch: `git checkout -b feature/naam-van-feature`
-- Codeer en commit je wijzigingen
-- Dien een pull request in op de main branch
-
-Licentie
-
-Dit project is beschikbaar onder de MIT-licentie. Je mag de code vrij gebruiken, aanpassen en distribueren zolang je de licentie respecteert.
-
-## Code Review Opmerkingen en TODO's
-
-### Algemene verbeterpunten
-- Consolideer configuratie: Vermijd duplicatie tussen `config.Config` en `database.Config`
-- Gebruik één centraal `LoadConfig()`-mechanisme
-- Voeg betere validatie toe aan service-laag (bijv. voor gebruikersinvoer)
-- Overweeg gestructureerde logging (logrus of zap) voor consistentie
+## Best Practices
 
 ### Beveiliging
-- Zorg dat JWT_SECRET in productie altijd wordt overschreven (niet de default gebruiken)
-- Overweeg een "mislukte inlogpogingen" teller of rate-limiter tegen brute-force
-- Controleer dat gevoelige data (wachtwoorden) nooit in logs terechtkomen
-- Zorg dat in productie DB_DROP_TABLES altijd false is
+
+- JWT tokens hebben een expiratie tijd van 24 uur
+- Wachtwoorden worden gehasht met bcrypt
+- Rollen worden gecontroleerd voor elke beschermde route
+- Audit logging voor alle mutaties
+
+### Performance
+
+- Database indexen voor veelgebruikte velden
+- Trigram indexen voor ILIKE zoekopdrachten
+- Paginering voor alle lijst endpoints
+- Maximale pageSize om database overbelasting te voorkomen
+
+### Error Handling
+
+- Consistente error responses met `success` veld
+- Duidelijke foutmeldingen
+- Juiste HTTP status codes
+
+## Code Review Opmerkingen
+
+### Configuratie
+
+- Gebruik één centrale configuratie in `config/config.go`
+- Vermijd dubbele configuratie in verschillende delen van de code
+- Gebruik environment variabelen voor alle configuratie
+- Waarschuw bij onveilige defaults in productie
 
 ### Database
-- Voeg indexen toe voor veelgebruikte query-velden (user_id, action_type, etc.)
-- Overweeg trigram-indexen voor ILIKE zoekopdrachten in PostgreSQL
-- Consolideer Delete-methodes in repositories (Delete vs DeleteUser)
 
-### API Design
-- Overweeg consistente response-structuur met "success" veld
-- Beperk pageSize om database-overbelasting te voorkomen
-- Documenteer context-gebruik (bijv. userData in context voor auditing)
+- Gebruik indexen voor veelgebruikte velden
+- Gebruik trigram indexen voor ILIKE zoekopdrachten
+- Zorg dat `DB_DROP_TABLES` altijd `false` is in productie
+- Gebruik migraties voor schema wijzigingen
 
 ### Middleware
-- Consolideer JWT-validatie middleware (AuthMiddleware vs NewJWTAuthMiddleware)
-- Overweeg onderscheid tussen 401/403 responses (ontbrekende vs ongeldige claims)
 
-### Admin-gebruiker
-- Verplaats admin-gebruiker creatie naar een specifieke seed-functie of migratie
-- Documenteer default credentials duidelijk voor ontwikkelaars
+- Consolideer middleware functies om duplicatie te voorkomen
+- Gebruik consistente error responses
+- Log alleen relevante acties
 
-Deze punten zullen in toekomstige updates worden aangepakt om de codebase te verbeteren.
+### Models
+
+- Gebruik GORM tags voor betere database schema
+- Implementeer BeforeSave hooks voor wachtwoord hashing
+- Gebruik constanten voor entity types en action types
+
+### Repositories
+
+- Consolideer Delete methodes
+- Verbeter error handling
+- Gebruik prepared statements voor veiligheid
+
+### API
+
+- Implementeer consistente response structuur
+- Valideer input parameters
+- Beperk pageSize om database overbelasting te voorkomen
+- Gebruik juiste HTTP status codes

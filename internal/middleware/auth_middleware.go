@@ -7,38 +7,48 @@ import (
 	"odomosml/internal/auth/service"
 	userModel "odomosml/internal/user/model"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 
+// AuthMiddleware controleert of de gebruiker geauthenticeerd is
+// en zet de gebruikersinformatie in de context
 func AuthMiddleware(authService service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"error":   "Authorization header is vereist",
+			})
 			c.Abort()
 			return
 		}
 
-		// Check if the header starts with "Bearer "
+		// Controleer of de header begint met "Bearer "
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"error":   "Ongeldig authorization header formaat",
+			})
 			c.Abort()
 			return
 		}
 
-		// Extract the token
+		// Haal de token uit de header
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 
-		// Validate the token
+		// Valideer de token
 		claims, err := authService.ValidateToken(token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"error":   "Ongeldige token: " + err.Error(),
+			})
 			c.Abort()
 			return
 		}
 
-		// Set user information in the context
+		// Zet gebruikersinformatie in de context
 		c.Set("userID", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("email", claims.Email)
@@ -49,17 +59,24 @@ func AuthMiddleware(authService service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// RoleMiddleware checks if the user has the required role
+// RoleMiddleware controleert of de gebruiker de vereiste rol heeft
 func RoleMiddleware(requiredRoles ...userModel.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		role, exists := c.Get("userRole")
+		// Haal de rol uit de context
+		roleInterface, exists := c.Get("userRole")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "geen rol gevonden"})
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"error":   "Gebruiker niet geauthenticeerd",
+			})
 			c.Abort()
 			return
 		}
 
-		userRole := userModel.Role(role.(string))
+		// Converteer naar string en dan naar Role type
+		userRole := userModel.Role(roleInterface.(string))
+
+		// Controleer of de gebruiker een van de vereiste rollen heeft
 		hasRequiredRole := false
 		for _, requiredRole := range requiredRoles {
 			if userRole == requiredRole {
@@ -69,74 +86,10 @@ func RoleMiddleware(requiredRoles ...userModel.Role) gin.HandlerFunc {
 		}
 
 		if !hasRequiredRole {
-			c.JSON(http.StatusForbidden, gin.H{"error": "onvoldoende rechten"})
-			c.Abort()
-			return
-		}
-
-		c.Next()
-	}
-}
-
-// NewJWTAuthMiddleware maakt een nieuwe JWT authenticatie middleware
-func NewJWTAuthMiddleware(secret string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
-			c.Abort()
-			return
-		}
-
-		// Check Bearer schema
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token format"})
-			c.Abort()
-			return
-		}
-
-		// Parse en valideer token
-		token, err := jwt.Parse(parts[1], func(token *jwt.Token) (interface{}, error) {
-			return []byte(secret), nil
-		})
-
-		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Abort()
-			return
-		}
-
-		// Haal claims op
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
-			c.Abort()
-			return
-		}
-
-		// Sla user info op in context
-		c.Set("userID", uint(claims["user_id"].(float64)))
-		c.Set("username", claims["username"].(string))
-		c.Set("email", claims["email"].(string))
-		c.Set("role", claims["role"].(string))
-
-		c.Next()
-	}
-}
-
-// NewRoleMiddleware maakt een nieuwe role-based middleware
-func NewRoleMiddleware(requiredRole string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		role, exists := c.Get("role")
-		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Gebruiker niet geauthenticeerd"})
-			c.Abort()
-			return
-		}
-
-		if role.(string) != requiredRole {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Onvoldoende rechten"})
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"error":   "Onvoldoende rechten voor deze actie",
+			})
 			c.Abort()
 			return
 		}

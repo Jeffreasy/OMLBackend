@@ -1,132 +1,127 @@
 package app
 
 import (
-	"fmt"
-	auditHttp "odomosml/internal/audit/delivery/http"
+	"log"
+	"odomosml/config"
+	auditHandler "odomosml/internal/audit/delivery/http"
 	auditRepo "odomosml/internal/audit/repository"
 	auditService "odomosml/internal/audit/service"
-	authHttp "odomosml/internal/auth/delivery/http"
+	authHandler "odomosml/internal/auth/delivery/http"
 	authService "odomosml/internal/auth/service"
-	"odomosml/internal/config"
-	customerHttp "odomosml/internal/customer/delivery/http"
+	customerHandler "odomosml/internal/customer/delivery/http"
 	customerRepo "odomosml/internal/customer/repository"
 	customerService "odomosml/internal/customer/service"
 	"odomosml/internal/middleware"
-	userHttp "odomosml/internal/user/delivery/http"
+	userHandler "odomosml/internal/user/delivery/http"
+	userModel "odomosml/internal/user/model"
 	userRepo "odomosml/internal/user/repository"
 	userService "odomosml/internal/user/service"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
+// App struct bevat de applicatie configuratie
 type App struct {
-	db     *gorm.DB
 	router *gin.Engine
+	db     *gorm.DB
 	config *config.Config
 }
 
-func NewApp(db *gorm.DB) *App {
-	// Laad configuratie
-	cfg := &config.Config{
-		JWTSecret:          getEnvOrDefault("JWT_SECRET", "your-secret-key"),
-		JWTExpirationHours: 24,
-	}
-
-	return &App{
-		db:     db,
-		router: gin.Default(),
-		config: cfg,
-	}
+// GetRouter retourneert de gin router instance
+func (a *App) GetRouter() *gin.Engine {
+	return a.router
 }
 
-func (a *App) Run() error {
-	// Repositories
+// NewApp maakt een nieuwe applicatie instantie
+func NewApp(db *gorm.DB, cfg *config.Config) *App {
+	// Stel Gin mode in op basis van environment
+	if cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.Default()
+
+	// Maak een nieuwe app instantie
+	app := &App{
+		router: router,
+		db:     db,
+		config: cfg,
+	}
+
+	// Initialiseer routes
+	app.setupRoutes()
+
+	return app
+}
+
+// setupRoutes initialiseert alle routes en middlewares
+func (a *App) setupRoutes() {
+	// Initialiseer repositories
 	userRepository := userRepo.NewUserRepository(a.db)
 	customerRepository := customerRepo.NewCustomerRepository(a.db)
 	auditRepository := auditRepo.NewAuditRepository(a.db)
 
-	// Services
+	// Initialiseer services
 	userSvc := userService.NewUserService(userRepository)
 	customerSvc := customerService.NewCustomerService(customerRepository)
-	authSvc := authService.NewAuthService(userRepository, a.config)
 	auditSvc := auditService.NewAuditService(auditRepository)
+	authSvc := authService.NewAuthService(userRepository, a.config)
 
-	// Middleware config
-	auditConfig := middleware.AuditMiddlewareConfig{
-		AuditService: auditSvc,
-		CustomerRepo: customerRepository,
-		UserRepo:     userRepository,
-	}
+	// Initialiseer middlewares
+	authMiddleware := middleware.AuthMiddleware(authSvc)
+	auditMiddleware := middleware.NewAuditMiddleware(auditSvc)
 
-	// Middleware
-	authMiddleware := middleware.NewJWTAuthMiddleware(a.config.JWTSecret)
-	auditMiddleware := middleware.NewAuditMiddleware(auditConfig)
-	adminMiddleware := middleware.NewRoleMiddleware("ADMIN")
+	// Initialiseer handlers
+	userHandler := userHandler.NewUserHandler(userSvc)
+	customerHandler := customerHandler.NewCustomerHandler(customerSvc)
+	auditHandler := auditHandler.NewAuditHandler(auditSvc)
+	authHandler := authHandler.NewAuthHandler(authSvc)
 
-	// Handlers
-	authHandler := authHttp.NewAuthHandler(authSvc)
-	userHandler := userHttp.NewUserHandler(userSvc)
-	customerHandler := customerHttp.NewCustomerHandler(customerSvc)
-	auditHandler := auditHttp.NewAuditHandler(auditSvc)
+	// API routes
+	api := a.router.Group("/api")
 
-	// Public routes
-	auth := a.router.Group("/api/auth")
+	// Auth routes (publiek)
+	auth := api.Group("/auth")
 	{
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/refresh", authMiddleware, authHandler.Refresh)
 	}
 
-	// Protected routes
-	api := a.router.Group("/api")
-	api.Use(authMiddleware)
+	// User routes (alleen admin)
+	users := api.Group("/users")
+	users.Use(authMiddleware, middleware.RoleMiddleware(userModel.RoleAdmin), auditMiddleware)
 	{
-		// Klanten routes
-		customers := api.Group("/klanten")
-		customers.Use(auditMiddleware)
-		{
-			customers.GET("", customerHandler.GetAll)
-			customers.GET("/:id", customerHandler.GetByID)
-			customers.POST("", customerHandler.Create)
-			customers.PUT("/:id", customerHandler.Update)
-			customers.PATCH("/:id", customerHandler.PartialUpdate)
-			customers.DELETE("/:id", customerHandler.Delete)
-		}
-
-		// Gebruikers routes (alleen voor admins)
-		users := api.Group("/users")
-		users.Use(adminMiddleware, auditMiddleware)
-		{
-			users.GET("", userHandler.GetAll)
-			users.GET("/:id", userHandler.GetByID)
-			users.POST("", userHandler.Create)
-			users.PUT("/:id", userHandler.Update)
-			users.DELETE("/:id", userHandler.Delete)
-		}
-
-		// Audit logs routes (alleen voor admins)
-		logs := api.Group("/logs")
-		logs.Use(adminMiddleware)
-		{
-			logs.GET("", auditHandler.GetLogs)
-		}
+		users.GET("", userHandler.GetAll)
+		users.GET("/:id", userHandler.GetByID)
+		users.POST("", userHandler.Create)
+		users.PUT("/:id", userHandler.Update)
+		users.DELETE("/:id", userHandler.Delete)
 	}
 
-	// Start de server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// Customer routes (admin en user)
+	customers := api.Group("/klanten")
+	customers.Use(authMiddleware, middleware.RoleMiddleware(userModel.RoleAdmin, userModel.RoleUser), auditMiddleware)
+	{
+		customers.GET("", customerHandler.GetAll)
+		customers.GET("/:id", customerHandler.GetByID)
+		customers.POST("", customerHandler.Create)
+		customers.PUT("/:id", customerHandler.Update)
+		customers.PATCH("/:id", customerHandler.PartialUpdate)
+		customers.DELETE("/:id", customerHandler.Delete)
 	}
 
-	return a.router.Run(fmt.Sprintf(":%s", port))
+	// Audit log routes (alleen admin)
+	logs := api.Group("/logs")
+	logs.Use(authMiddleware, middleware.RoleMiddleware(userModel.RoleAdmin))
+	{
+		logs.GET("", auditHandler.GetLogs)
+	}
 }
 
-// getEnvOrDefault haalt een environment variable op of geeft een default waarde terug
-func getEnvOrDefault(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
+// Run start de applicatie
+func (a *App) Run() error {
+	log.Printf("Starting server on %s", a.config.ServerAddress)
+	return a.router.Run(a.config.ServerAddress)
 }
